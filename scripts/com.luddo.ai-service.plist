@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.luddo.ai-service</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/node</string>
+        <string>/Volumes/AI_SSD/ai-local/luddo-ai-service/node_modules/.bin/tsx</string>
+        <string>/Volumes/AI_SSD/ai-local/luddo-ai-service/src/index.ts</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Volumes/AI_SSD/ai-local/luddo-ai-service</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>NODE_ENV</key>
+        <string>production</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Volumes/AI_SSD/ai-local/logs/luddo-ai-service.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Volumes/AI_SSD/ai-local/logs/luddo-ai-service.error.log</string>
+
+    <key>WatchPaths</key>
+    <array>
+        <string>/Volumes/AI_SSD</string>
+    </array>
+</dict>
+</plist>
