@@ -153,8 +153,25 @@ export class GameRunner {
     while (this.running && !this.aborted && this.gameState.gameState === 'playing') {
       // Check turn limit
       if (this.turnCount >= (this.config.maxTurns || 500)) {
-        this.aborted = true;
-        this.abortReason = 'Max turns exceeded';
+        // Max turns exceeded - determine winner by most tokens home
+        let bestPlayer: PlayerColor | null = null;
+        let maxTokensHome = -1;
+        for (const color of this.config.players) {
+          const tokensHome = this.playerStats[color].tokensHome;
+          if (tokensHome > maxTokensHome) {
+            maxTokensHome = tokensHome;
+            bestPlayer = color;
+          }
+        }
+        if (bestPlayer && maxTokensHome > 0) {
+          // Force end the game with the leading player as winner
+          this.gameState.winner = bestPlayer;
+          this.gameState.gameState = 'finished';
+          log(`Game ${this.gameId} reached max turns. Winner by progress: ${bestPlayer} (${maxTokensHome} tokens home)`);
+        } else {
+          this.aborted = true;
+          this.abortReason = 'Max turns exceeded with no progress';
+        }
         break;
       }
 

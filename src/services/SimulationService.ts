@@ -47,6 +47,7 @@ let currentBatch: SimulationBatch | null = null;
 let isPaused = false;
 let shouldStop = false;
 let currentGameRunner: GameRunner | null = null;
+let winsByColor: Record<string, number> = { red: 0, blue: 0, yellow: 0, green: 0 };
 
 export class SimulationService {
   private storage: StorageService;
@@ -61,6 +62,30 @@ export class SimulationService {
     this.tipsService = new TipsService();
     this.metricsService = new MetricsService();
     this.aiPlayerService = new AIPlayerService(this.ollamaService, this.tipsService);
+
+    // Clean up any stale "running" simulations from previous server instances
+    this.cleanupStaleSimulations();
+  }
+
+  /**
+   * Mark any "running" simulations as failed on startup
+   * (they can't actually be running if the service just started)
+   */
+  private cleanupStaleSimulations(): void {
+    try {
+      const db = this.storage.getDatabase();
+      const result = db.prepare(`
+        UPDATE simulation_batches
+        SET status = 'failed', ended_at = ?
+        WHERE status = 'running'
+      `).run(new Date().toISOString());
+
+      if (result.changes > 0) {
+        console.log(`[SIMULATION] Cleaned up ${result.changes} stale simulation(s) from previous run`);
+      }
+    } catch (error) {
+      console.error('[SIMULATION] Failed to cleanup stale simulations:', error);
+    }
   }
 
   /**
@@ -73,6 +98,7 @@ export class SimulationService {
 
     const batchId = `batch_${Date.now()}_${uuidv4().slice(0, 6)}`;
 
+    winsByColor = { red: 0, blue: 0, yellow: 0, green: 0 };
     currentBatch = {
       id: batchId,
       status: 'running',
@@ -194,7 +220,7 @@ export class SimulationService {
     currentBatch: SimulationBatch | null;
   }> {
     return {
-      isRunning: currentBatch?.status === 'running' ?? false,
+      isRunning: currentBatch?.status === 'running' || false,
       currentBatch
     };
   }
@@ -267,12 +293,14 @@ export class SimulationService {
 
         // Broadcast game end
         broadcastSimulationGameEnd({
+          turns: gameResult.turns,
           batchId: currentBatch.id,
           gameId: gameResult.gameId,
           winner: gameResult.winner,
           rankings: gameResult.rankings
         });
 
+        winsByColor[gameResult.winner.toLowerCase()] = (winsByColor[gameResult.winner.toLowerCase()] || 0) + 1;
         console.log(`[SIM] Game ${currentBatch.gamesCompleted}/${currentBatch.totalGames} completed. Winner: ${gameResult.winner}`);
 
       } catch (error) {
@@ -299,7 +327,8 @@ export class SimulationService {
         summary: {
           totalGames: currentBatch.totalGames,
           gamesCompleted: currentBatch.gamesCompleted,
-          duration: currentBatch.endedAt
+          duration: currentBatch.endedAt,
+          winsByColor: winsByColor
         }
       });
 

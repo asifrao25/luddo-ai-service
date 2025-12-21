@@ -121,12 +121,16 @@ export class StorageService {
         id TEXT PRIMARY KEY,
         started_at DATETIME NOT NULL,
         ended_at DATETIME,
-        status TEXT CHECK(status IN ('preparing', 'training', 'completed', 'failed')),
+        status TEXT CHECK(status IN ('preparing', 'training', 'completed', 'failed', 'cancelled')),
         base_model TEXT NOT NULL,
         output_model TEXT,
         dataset_path TEXT,
         dataset_size INTEGER,
         epochs INTEGER,
+        current_epoch INTEGER DEFAULT 0,
+        current_loss REAL,
+        progress_percent INTEGER DEFAULT 0,
+        final_loss REAL,
         error_message TEXT
       );
 
@@ -149,6 +153,38 @@ export class StorageService {
       CREATE INDEX IF NOT EXISTS idx_ai_decisions_game ON ai_decisions(game_id);
       CREATE INDEX IF NOT EXISTS idx_game_players_game ON game_players(game_id);
     `);
+
+    // Run migrations for existing databases
+    this.runMigrations();
+  }
+
+  /**
+   * Run schema migrations for existing databases
+   */
+  private runMigrations(): void {
+    // Check if training_runs needs new columns
+    const columns = this.db!.prepare("PRAGMA table_info(training_runs)").all() as any[];
+    const columnNames = columns.map(c => c.name);
+
+    if (!columnNames.includes('current_epoch')) {
+      console.log('[STORAGE] Migrating: Adding current_epoch to training_runs');
+      this.db!.exec('ALTER TABLE training_runs ADD COLUMN current_epoch INTEGER DEFAULT 0');
+    }
+
+    if (!columnNames.includes('current_loss')) {
+      console.log('[STORAGE] Migrating: Adding current_loss to training_runs');
+      this.db!.exec('ALTER TABLE training_runs ADD COLUMN current_loss REAL');
+    }
+
+    if (!columnNames.includes('progress_percent')) {
+      console.log('[STORAGE] Migrating: Adding progress_percent to training_runs');
+      this.db!.exec('ALTER TABLE training_runs ADD COLUMN progress_percent INTEGER DEFAULT 0');
+    }
+
+    if (!columnNames.includes('final_loss')) {
+      console.log('[STORAGE] Migrating: Adding final_loss to training_runs');
+      this.db!.exec('ALTER TABLE training_runs ADD COLUMN final_loss REAL');
+    }
   }
 
   // ============ JSON File Operations ============

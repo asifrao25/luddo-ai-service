@@ -8,7 +8,7 @@ import { ServiceConfig } from '../../config/index.js';
 export function authMiddleware(config: ServiceConfig) {
   return (req: Request, res: Response, next: NextFunction) => {
     // Skip auth if not required
-    if (!config.auth.apiKeyRequired) {
+    if (!config.server.apiKeyRequired) {
       return next();
     }
 
@@ -39,7 +39,7 @@ export function authenticateWebSocket(
   apiKey: string | undefined,
   config: ServiceConfig
 ): boolean {
-  if (!config.auth.apiKeyRequired) {
+  if (!config.server.apiKeyRequired) {
     return true;
   }
   return apiKey === config.auth.apiKey;

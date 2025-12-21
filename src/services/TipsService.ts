@@ -129,6 +129,14 @@ export class TipsService {
   }
 
   /**
+   * Get tips by IDs
+   */
+  async getTipsByIds(ids: string[]): Promise<Tip[]> {
+    const db = this.loadDatabase();
+    return db.tips.filter(t => ids.includes(t.id));
+  }
+
+  /**
    * Create new tip
    */
   async createTip(data: {

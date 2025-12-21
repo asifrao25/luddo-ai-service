@@ -23,6 +23,7 @@ import { metricsRoutes } from './api/routes/metrics.js';
 import { trainingRoutes } from './api/routes/training.js';
 import { modelsRoutes } from './api/routes/models.js';
 import aiRoutes from './api/routes/ai.js';
+import { systemRoutes } from './api/routes/system.js';
 import { setupWebSocket } from './api/websocket.js';
 import { loadConfig } from './config/index.js';
 
@@ -62,6 +63,7 @@ app.use('/api/metrics', authMiddleware(config), metricsRoutes);
 app.use('/api/training', authMiddleware(config), trainingRoutes);
 app.use('/api/models', authMiddleware(config), modelsRoutes);
 app.use('/api/ai', authMiddleware(config), aiRoutes);
+app.use('/api/system', authMiddleware(config), systemRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -77,6 +79,7 @@ app.get('/', (req, res) => {
       training: '/api/training',
       models: '/api/models',
       ai: '/api/ai',
+      system: '/api/system',
       websocket: '/ws'
     }
   });

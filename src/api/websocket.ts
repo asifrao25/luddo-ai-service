@@ -163,6 +163,7 @@ export function broadcastSimulationGameEnd(data: {
   batchId: string;
   gameId: string;
   winner: string;
+  turns: number;
   rankings: string[];
 }): void {
   broadcast('simulation', 'gameEnd', data);
@@ -179,14 +180,21 @@ export function broadcastSimulationBatchEnd(data: {
 }
 
 /**
- * Broadcast training progress
+ * Broadcast training progress with detailed metrics
  */
 export function broadcastTrainingProgress(data: {
   trainingId: string;
+  stage?: string;
   epoch: number;
   totalEpochs: number;
-  loss?: number;
   percentage: number;
+  loss?: number | null;
+  learningRate?: number | null;
+  message?: string;
+  step?: number;
+  totalSteps?: number;
+  lossHistory?: Array<{ step: number; loss: number; epoch: number }>;
+  datasetSize?: number;
 }): void {
   broadcast('training', 'progress', data);
 }
@@ -197,6 +205,9 @@ export function broadcastTrainingProgress(data: {
 export function broadcastTrainingComplete(data: {
   trainingId: string;
   modelName: string;
+  success?: boolean;
+  finalLoss?: number;
+  error?: string;
 }): void {
   broadcast('training', 'complete', data);
 }

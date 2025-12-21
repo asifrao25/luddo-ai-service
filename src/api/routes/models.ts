@@ -14,6 +14,51 @@ import { loadConfig, saveConfig } from '../../config/index.js';
 const router = Router();
 const ollamaService = new OllamaService();
 
+// Get current active model info
+router.get('/current', async (req, res) => {
+  try {
+    const config = loadConfig();
+    const modelName = config.ollama.defaultModel;
+    const models = await ollamaService.listModels();
+
+    // Find the current model in the list
+    const currentModel = models.find(m => m.name === modelName || m.name === `${modelName}:latest`);
+
+    let modelInfo = {
+      name: modelName,
+      displayName: modelName.replace(/:latest$/, ''),
+      createdAt: new Date().toISOString(),
+      size: 'unknown',
+      family: 'Unknown'
+    };
+
+    if (currentModel) {
+      modelInfo.size = currentModel.size ? String(currentModel.size) : 'unknown';
+      modelInfo.createdAt = currentModel.modified_at || new Date().toISOString();
+    }
+
+    // Determine family from model name
+    const nameLower = modelName.toLowerCase();
+    if (nameLower.includes('luddo')) {
+      modelInfo.family = 'Luddo Expert';
+      modelInfo.displayName = 'Luddo Expert AI';
+    } else if (nameLower.includes('llama')) {
+      modelInfo.family = 'Llama';
+    } else if (nameLower.includes('qwen')) {
+      modelInfo.family = 'Qwen';
+    } else if (nameLower.includes('mistral')) {
+      modelInfo.family = 'Mistral';
+    }
+
+    res.json(modelInfo);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get current model',
+      message: (error as Error).message
+    });
+  }
+});
+
 // List available models
 router.get('/', async (req, res) => {
   try {

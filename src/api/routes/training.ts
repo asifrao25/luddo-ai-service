@@ -22,27 +22,26 @@ router.post('/generate-dataset', async (req, res) => {
       source = 'simulations',
       dateRange,
       filterBy,
+      maxExamples,
       outputName
     } = req.body;
 
-    if (!outputName) {
-      return res.status(400).json({
-        error: 'Missing required field',
-        required: ['outputName']
-      });
-    }
+    // Auto-generate outputName if not provided (iOS doesn't send it)
+    const datasetName = outputName || `dataset-${Date.now()}`;
 
     const result = await trainingService.generateDataset({
       source,
       dateRange,
       filterBy,
-      outputName
+      outputName: datasetName
     });
 
+    // Return format expected by iOS app (snake_case for CodingKeys)
     res.json({
-      datasetId: result.datasetId,
-      status: 'generating',
-      estimatedSize: result.estimatedSize
+      dataset_id: datasetName,
+      path: `training/datasets/${datasetName}.jsonl`,
+      examples: result.estimatedSize,
+      size_bytes: result.estimatedSize * 350 // Rough estimate
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate dataset', message: (error as Error).message });
@@ -86,7 +85,7 @@ router.post('/start', async (req, res) => {
     res.json({
       trainingId: result.trainingId,
       status: 'started',
-      estimatedDuration: result.estimatedDuration
+      message: `Training started, estimated duration: ${result.estimatedDuration}`
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to start training', message: (error as Error).message });
@@ -113,6 +112,34 @@ router.get('/history', async (req, res) => {
     res.json({ runs: history });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get history', message: (error as Error).message });
+  }
+});
+
+// Cancel current training
+router.post('/cancel', async (req, res) => {
+  try {
+    const cancelled = await trainingService.cancelTraining();
+    if (cancelled) {
+      res.json({ success: true, message: 'Training cancelled' });
+    } else {
+      res.status(400).json({ success: false, message: 'No training in progress' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to cancel training', message: (error as Error).message });
+  }
+});
+
+// Get current live progress
+router.get('/progress', async (req, res) => {
+  try {
+    const progress = await trainingService.getCurrentProgress();
+    if (progress) {
+      res.json(progress);
+    } else {
+      res.status(404).json({ message: 'No training in progress' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get progress', message: (error as Error).message });
   }
 });
 
