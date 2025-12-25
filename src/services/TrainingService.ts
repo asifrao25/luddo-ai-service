@@ -1022,7 +1022,7 @@ REASONING: ${reasoning}`;
       } catch (e) {
         // Ignore parse errors (file might be being written)
       }
-    }, 500); // Check every 500ms
+    }, 100); // Check every 100ms for real-time updates
   }
 
   /**

@@ -378,6 +378,7 @@ def main():
                 '--batch-size', '4',
                 '--num-layers', '16',
                 '--learning-rate', '1e-5',
+                '--steps-per-report', '1',  # Report every step for real-time updates
                 '--adapter-path', adapter_path,
             ]
 
