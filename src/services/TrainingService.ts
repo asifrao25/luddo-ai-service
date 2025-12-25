@@ -114,29 +114,52 @@ export class TrainingService {
       const checkpointFile = join(modelDir, 'checkpoint.json');
       const hasCheckpoint = existsSync(checkpointFile);
 
-      if (hasCheckpoint) {
-        // Check if Python training process is already running
-        const isProcessRunning = await this.isTrainingProcessRunning(activeRun.id);
+      // First, check if the training process is actually still running
+      const isProcessRunning = await this.isTrainingProcessRunning(activeRun.id);
 
-        if (isProcessRunning) {
-          // Process is already running - just reconnect to monitor it
-          console.log(`[TRAINING] Training process already running, reconnecting: ${activeRun.id}`);
-          this.currentTrainingId = activeRun.id;
+      if (isProcessRunning) {
+        // Process is running - just reconnect to monitor it
+        console.log(`[TRAINING] Training process already running, reconnecting: ${activeRun.id}`);
+        this.currentTrainingId = activeRun.id;
 
-          // Start watching the progress file without spawning new process
-          this.startProgressWatcher(activeRun.id, progressFile, {
-            baseModel: activeRun.base_model,
-            datasetId: '',
-            outputModelName: activeRun.output_model,
-            epochs: activeRun.epochs
-          });
-          return;
+        // Start watching the progress file
+        this.startProgressWatcher(activeRun.id, progressFile, {
+          baseModel: activeRun.base_model,
+          datasetId: '',
+          outputModelName: activeRun.output_model,
+          epochs: activeRun.epochs
+        });
+
+        // Broadcast current progress if available
+        if (existsSync(progressFile)) {
+          try {
+            const progress: TrainingProgress = JSON.parse(readFileSync(progressFile, 'utf-8'));
+            broadcastTrainingProgress({
+              trainingId: activeRun.id,
+              stage: progress.stage,
+              epoch: progress.epoch,
+              totalEpochs: progress.total_epochs,
+              percentage: progress.progress,
+              loss: progress.loss,
+              learningRate: progress.learning_rate,
+              message: progress.message || 'Reconnected to training session',
+              step: progress.step,
+              totalSteps: progress.total_steps,
+              lossHistory: progress.loss_history,
+              datasetSize: progress.dataset_size
+            });
+          } catch (e) {
+            console.log('[TRAINING] Could not read progress file for broadcast');
+          }
         }
+        return;
+      }
 
-        // Process not running - resume training
-        console.log(`[TRAINING] Found checkpoint, resuming training: ${activeRun.id}`);
+      // Process is NOT running - check if we can resume or should mark as failed
+      if (hasCheckpoint) {
+        // Checkpoint exists - resume training
+        console.log(`[TRAINING] Process stopped, resuming from checkpoint: ${activeRun.id}`);
 
-        // Read checkpoint to get current progress
         let checkpointData: any = {};
         try {
           checkpointData = JSON.parse(readFileSync(checkpointFile, 'utf-8'));
@@ -152,46 +175,12 @@ export class TrainingService {
           epochs: activeRun.epochs
         }, activeRun.dataset_path, checkpointData);
 
-      } else if (existsSync(progressFile)) {
-        // Progress file exists but no checkpoint - Python process may still be running
-        this.currentTrainingId = activeRun.id;
-
-        // Restart progress watcher
-        this.startProgressWatcher(activeRun.id, progressFile, {
-          baseModel: activeRun.base_model,
-          datasetId: '',
-          outputModelName: activeRun.output_model,
-          epochs: activeRun.epochs
-        });
-
-        console.log(`[TRAINING] Recovered active training session: ${activeRun.id}`);
-
-        // Read current progress and broadcast it
-        try {
-          const progress: TrainingProgress = JSON.parse(readFileSync(progressFile, 'utf-8'));
-          broadcastTrainingProgress({
-            trainingId: activeRun.id,
-            stage: progress.stage,
-            epoch: progress.epoch,
-            totalEpochs: progress.total_epochs,
-            percentage: progress.progress,
-            loss: progress.loss,
-            learningRate: progress.learning_rate,
-            message: progress.message || 'Recovered training session',
-            step: progress.step,
-            totalSteps: progress.total_steps,
-            lossHistory: progress.loss_history,
-            datasetSize: progress.dataset_size
-          });
-        } catch (e) {
-          console.log('[TRAINING] Could not read progress file for broadcast');
-        }
       } else {
-        // No checkpoint and no progress file - mark as failed
+        // No checkpoint and process not running - mark as failed (orphaned)
         const now = new Date().toISOString();
         db.prepare(`
           UPDATE training_runs
-          SET status = 'failed', ended_at = ?, error_message = 'Training interrupted - no checkpoint found'
+          SET status = 'failed', ended_at = ?, error_message = 'Training process stopped unexpectedly'
           WHERE id = ?
         `).run(now, activeRun.id);
 
@@ -1039,10 +1028,23 @@ REASONING: ${reasoning}`;
    * Cancel current training
    */
   async cancelTraining(): Promise<boolean> {
-    if (!this.currentTrainingId) return false;
+    // Get training ID from memory or database
+    let trainingId: string | null = this.currentTrainingId;
 
-    const trainingId = this.currentTrainingId;
-    const pm2ProcessName = `training-${trainingId}`;
+    if (!trainingId) {
+      // Check database for active training (in case service was restarted)
+      const db = this.storage.getDatabase();
+      const activeRun = db.prepare(`
+        SELECT id FROM training_runs
+        WHERE status IN ('training', 'preparing')
+        ORDER BY started_at DESC LIMIT 1
+      `).get() as any;
+
+      if (!activeRun) return false;
+      trainingId = activeRun.id as string;
+    }
+
+    const pm2ProcessName = `training-${trainingId!}`;
 
     // Try to stop PM2 process first
     await new Promise<void>((resolve) => {
@@ -1065,11 +1067,11 @@ REASONING: ${reasoning}`;
 
     const db = this.storage.getDatabase();
     db.prepare(`
-      UPDATE training_runs SET status = 'cancelled', ended_at = ? WHERE id = ?
-    `).run(new Date().toISOString(), trainingId);
+      UPDATE training_runs SET status = 'failed', ended_at = ?, error_message = 'Cancelled by user' WHERE id = ?
+    `).run(new Date().toISOString(), trainingId!);
 
     broadcastTrainingComplete({
-      trainingId,
+      trainingId: trainingId!,
       modelName: '',
       success: false,
       error: 'Training cancelled by user'
